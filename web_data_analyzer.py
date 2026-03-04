@@ -2,225 +2,161 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 from io import BytesIO
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, Image
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
 from reportlab.lib.styles import getSampleStyleSheet
-from reportlab.lib import colors
-from reportlab.lib.units import inch
 from reportlab.lib.pagesizes import A4
-import tempfile
 import datetime
+import bcrypt
 
 # ---------------- PAGE CONFIG ----------------
 st.set_page_config(
-    page_title="Corporate Data Intelligence Suite | Denis",
+    page_title="Data Intelligence SaaS | Denis",
     page_icon="📊",
     layout="wide"
 )
 
-# ---------------- HEADER ----------------
-st.markdown("""
-<style>
-.hero-box {
-    padding: 40px;
-    border-radius: 20px;
-    background: linear-gradient(135deg, #0f172a, #1e293b);
-    text-align: center;
-    box-shadow: 0px 10px 30px rgba(0,0,0,0.4);
-    margin-bottom: 25px;
-}
-.hero-title {
-    font-size: 48px;
-    font-weight: 800;
-    color: white;
-}
-.hero-subtitle {
-    font-size: 18px;
-    color: #cbd5e1;
-}
-</style>
-""", unsafe_allow_html=True)
+# ---------------- SESSION SETUP ----------------
+if "users" not in st.session_state:
+    st.session_state.users = {}
 
-st.markdown("""
-<div class="hero-box">
-    <div class="hero-title">📊 Corporate Data Intelligence Suite</div>
-    <div class="hero-subtitle">
-        Executive Analytics • AI Commentary • PDF Reporting<br>
-        Built by Denis
-    </div>
-</div>
-""", unsafe_allow_html=True)
+if "logged_in" not in st.session_state:
+    st.session_state.logged_in = False
 
-st.divider()
+if "current_user" not in st.session_state:
+    st.session_state.current_user = None
 
-# ---------------- SIDEBAR ----------------
-st.sidebar.title("📁 Navigation")
+if "report_history" not in st.session_state:
+    st.session_state.report_history = {}
+
+# ---------------- AUTH SYSTEM ----------------
+def register(username, password):
+    hashed = bcrypt.hashpw(password.encode(), bcrypt.gensalt())
+    st.session_state.users[username] = hashed
+    st.session_state.report_history[username] = []
+
+def login(username, password):
+    if username in st.session_state.users:
+        if bcrypt.checkpw(password.encode(), st.session_state.users[username]):
+            st.session_state.logged_in = True
+            st.session_state.current_user = username
+            return True
+    return False
+
+# ---------------- LOGIN / REGISTER SCREEN ----------------
+if not st.session_state.logged_in:
+
+    st.markdown("## 🚀 Welcome to Data Intelligence SaaS")
+    option = st.radio("Select Option", ["Login", "Register"])
+
+    username = st.text_input("Username")
+    password = st.text_input("Password", type="password")
+
+    if option == "Register":
+        if st.button("Create Account"):
+            if username and password:
+                register(username, password)
+                st.success("Account created successfully. Please login.")
+            else:
+                st.warning("Enter username and password.")
+
+    if option == "Login":
+        if st.button("Login"):
+            if login(username, password):
+                st.success("Login successful")
+                st.rerun()
+            else:
+                st.error("Invalid credentials")
+
+    st.stop()
+
+# ---------------- MAIN APP ----------------
+st.sidebar.success(f"Logged in as: {st.session_state.current_user}")
+
+if st.sidebar.button("Logout"):
+    st.session_state.logged_in = False
+    st.session_state.current_user = None
+    st.rerun()
+
+st.title("📊 Executive Data Intelligence Platform")
+
 menu = st.sidebar.radio(
-    "Select Module",
-    ["Upload & Overview", "Visualizations", "Data Cleaning"]
+    "Navigation",
+    ["Upload & Analyze", "Report History"]
 )
 
-st.sidebar.markdown("---")
-logo_file = st.sidebar.file_uploader("Upload Company Logo (Optional)", type=["png","jpg"])
-st.sidebar.caption("© 2026 Denis Analytics")
+uploaded_file = st.file_uploader("Upload CSV or Excel", type=["csv", "xlsx"])
 
-# ---------------- FILE UPLOAD ----------------
-uploaded_file = st.file_uploader(
-    "Upload Excel or CSV File (Max 200MB)",
-    type=["csv", "xlsx"]
-)
-
-if uploaded_file:
+if menu == "Upload & Analyze" and uploaded_file:
 
     if uploaded_file.name.endswith(".csv"):
         df = pd.read_csv(uploaded_file)
     else:
         df = pd.read_excel(uploaded_file)
 
-    # ---------------- DATE FILTER ----------------
-    date_columns = df.select_dtypes(include=["datetime64"]).columns
+    st.subheader("Dataset Overview")
+    st.write(df.head())
 
-    if len(date_columns) > 0:
-        selected_date_column = st.selectbox("Select Date Column for Filtering", date_columns)
-        min_date = df[selected_date_column].min()
-        max_date = df[selected_date_column].max()
-        start_date, end_date = st.date_input(
-            "Filter Date Range",
-            [min_date, max_date]
-        )
-        df = df[(df[selected_date_column] >= pd.to_datetime(start_date)) &
-                (df[selected_date_column] <= pd.to_datetime(end_date))]
+    col1, col2 = st.columns(2)
+    col1.metric("Rows", df.shape[0])
+    col2.metric("Columns", df.shape[1])
 
-    # ================================
-    # PAGE 1 — OVERVIEW
-    # ================================
-    if menu == "Upload & Overview":
+    numeric_df = df.select_dtypes(include=["int64", "float64"])
 
-        st.success("File uploaded successfully ✅")
+    if not numeric_df.empty:
+        column = st.selectbox("Select Column for Chart", numeric_df.columns)
+        fig = px.bar(df, x=column)
+        st.plotly_chart(fig, use_container_width=True)
 
-        col1, col2, col3 = st.columns(3)
-        col1.metric("Total Rows", df.shape[0])
-        col2.metric("Total Columns", df.shape[1])
-        col3.metric("Missing Values", df.isnull().sum().sum())
-
-        st.divider()
-        st.dataframe(df.head(), use_container_width=True)
-
-        numeric_df = df.select_dtypes(include=["int64", "float64"])
-
-        # -------- AI COMMENTARY --------
-        if not numeric_df.empty:
-            highest_mean = numeric_df.mean().idxmax()
-            lowest_mean = numeric_df.mean().idxmin()
-
-            commentary = f"""
+        commentary = f"""
 Executive Summary:
-The dataset consists of {df.shape[0]} records across {df.shape[1]} variables.
-The strongest performing metric is '{highest_mean}', demonstrating the highest average value.
-The lowest average metric is '{lowest_mean}', which may require management review.
-Overall data consistency appears suitable for strategic reporting.
+Dataset contains {df.shape[0]} records.
+Primary performance metric: {column}.
+Data appears structured for strategic analysis.
 """
-            st.info(commentary)
-        else:
-            commentary = "No numeric data available for executive insights."
-            st.warning(commentary)
 
-        # -------- CHART FOR PDF --------
-        chart_column = None
-        fig = None
+        st.info(commentary)
 
-        if len(numeric_df.columns) > 0:
-            chart_column = st.selectbox("Select Column for Executive Chart", numeric_df.columns)
-            fig = px.bar(df, x=chart_column)
-            st.plotly_chart(fig, use_container_width=True)
-
-        # -------- PDF GENERATION --------
-        if st.button("📄 Generate Full Executive PDF Report"):
+        if st.button("Generate Executive PDF Report"):
 
             buffer = BytesIO()
             doc = SimpleDocTemplate(buffer, pagesize=A4)
             elements = []
             styles = getSampleStyleSheet()
 
-            elements.append(Paragraph("Corporate Data Intelligence Report", styles["Heading1"]))
-            elements.append(Spacer(1, 0.3 * inch))
-            elements.append(Paragraph(f"Generated On: {datetime.datetime.now()}", styles["Normal"]))
-            elements.append(Spacer(1, 0.3 * inch))
-
+            elements.append(Paragraph("Executive Data Intelligence Report", styles["Heading1"]))
+            elements.append(Spacer(1, 12))
+            elements.append(Paragraph(f"Generated by: {st.session_state.current_user}", styles["Normal"]))
+            elements.append(Paragraph(f"Date: {datetime.datetime.now()}", styles["Normal"]))
+            elements.append(Spacer(1, 12))
             elements.append(Paragraph(commentary, styles["Normal"]))
-            elements.append(Spacer(1, 0.5 * inch))
-
-            if logo_file:
-                with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp_logo:
-                    tmp_logo.write(logo_file.getvalue())
-                    elements.append(Image(tmp_logo.name, width=2*inch, height=1*inch))
-                    elements.append(Spacer(1, 0.5 * inch))
-
-            if fig:
-                with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp_chart:
-                    fig.write_image(tmp_chart.name)
-                    elements.append(Image(tmp_chart.name, width=5*inch, height=3*inch))
 
             doc.build(elements)
             buffer.seek(0)
 
+            # Save to user history
+            st.session_state.report_history[st.session_state.current_user].append(
+                f"Report generated on {datetime.datetime.now()}"
+            )
+
             st.download_button(
-                label="⬇ Download Executive PDF",
+                label="Download Executive PDF",
                 data=buffer,
                 file_name="Executive_Report.pdf",
                 mime="application/pdf"
             )
 
-    # ================================
-    # PAGE 2 — VISUALIZATIONS
-    # ================================
-    if menu == "Visualizations":
+if menu == "Report History":
 
-        numeric_columns = df.select_dtypes(include=["int64", "float64"]).columns
+    st.subheader("📁 Your Generated Reports")
 
-        if len(numeric_columns) > 0:
-            chart_type = st.selectbox(
-                "Select Chart Type",
-                ["Histogram", "Bar Chart", "Line Chart", "Pie Chart"]
-            )
+    history = st.session_state.report_history.get(
+        st.session_state.current_user, []
+    )
 
-            column = st.selectbox("Select Column", numeric_columns)
+    if history:
+        for item in history:
+            st.write("•", item)
+    else:
+        st.info("No reports generated yet.")
 
-            if chart_type == "Histogram":
-                fig = px.histogram(df, x=column)
-            elif chart_type == "Bar Chart":
-                fig = px.bar(df, x=column)
-            elif chart_type == "Line Chart":
-                fig = px.line(df, y=column)
-            elif chart_type == "Pie Chart":
-                fig = px.pie(df, names=column)
-
-            st.plotly_chart(fig, use_container_width=True)
-        else:
-            st.warning("No numeric columns available.")
-
-    # ================================
-    # PAGE 3 — DATA CLEANING
-    # ================================
-    if menu == "Data Cleaning":
-
-        if st.button("Remove Missing Values"):
-            df = df.dropna()
-            st.success("Missing values removed ✅")
-
-        if st.button("Remove Duplicate Rows"):
-            df = df.drop_duplicates()
-            st.success("Duplicate rows removed ✅")
-
-        st.dataframe(df, use_container_width=True)
-
-        csv = df.to_csv(index=False).encode("utf-8")
-
-        st.download_button(
-            label="📥 Download Cleaned Data",
-            data=csv,
-            file_name="cleaned_data.csv",
-            mime="text/csv"
-        )
-
-st.divider()
-st.caption("🚀 Enterprise Executive Analytics Platform | Built by Denis")
+st.caption("Enterprise Data Intelligence SaaS | Built by Denis")
