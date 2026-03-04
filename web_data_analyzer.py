@@ -1,10 +1,11 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+from io import BytesIO
 
 # ---------------- PAGE CONFIG ----------------
 st.set_page_config(
-    page_title="Corporate Data Analyzer | Denis",
+    page_title="Corporate Data Intelligence Suite | Denis",
     page_icon="📊",
     layout="wide"
 )
@@ -13,22 +14,23 @@ st.set_page_config(
 st.markdown(
     """
     <style>
-    .hero-title {
-        font-size: 48px;
-        font-weight: 700;
+    .hero-box {
+        padding: 40px;
+        border-radius: 20px;
+        background: linear-gradient(135deg, #0f172a, #1e293b);
         text-align: center;
+        box-shadow: 0px 10px 30px rgba(0,0,0,0.4);
+        margin-bottom: 25px;
+    }
+    .hero-title {
+        font-size: 52px;
+        font-weight: 800;
+        color: white;
     }
     .hero-subtitle {
         font-size: 20px;
-        text-align: center;
-        color: #9aa0a6;
-        margin-bottom: 20px;
-    }
-    .hero-box {
-        padding: 30px;
-        border-radius: 15px;
-        background: linear-gradient(90deg, #111827, #1f2937);
-        margin-bottom: 20px;
+        color: #cbd5e1;
+        margin-top: 10px;
     }
     </style>
     """,
@@ -38,10 +40,10 @@ st.markdown(
 st.markdown(
     """
     <div class="hero-box">
-        <div class="hero-title">🚀 Corporate Data Analyzer</div>
+        <div class="hero-title">📊 Corporate Data Intelligence Suite</div>
         <div class="hero-subtitle">
-            Smart • Fast • Professional Data Intelligence Platform<br>
-            Built & Designed by Denis
+            Enterprise Analytics • Automated Insights • Executive Reporting<br>
+            Designed & Built by Denis
         </div>
     </div>
     """,
@@ -51,9 +53,9 @@ st.markdown(
 st.divider()
 
 # ---------------- SIDEBAR ----------------
-st.sidebar.title("Navigation")
+st.sidebar.title("📁 Navigation")
 menu = st.sidebar.radio(
-    "Go to",
+    "Select Module",
     ["Upload & Overview", "Visualizations", "Data Cleaning"]
 )
 
@@ -61,25 +63,39 @@ st.sidebar.markdown("---")
 st.sidebar.caption("© 2026 Denis Analytics")
 
 # ---------------- FILE UPLOAD ----------------
-uploaded_file = st.file_uploader("Upload Excel or CSV File (Max 200MB)", type=["csv", "xlsx"])
+uploaded_file = st.file_uploader(
+    "Upload Excel or CSV File (Max 200MB)",
+    type=["csv", "xlsx"]
+)
 
 if uploaded_file:
 
+    # Read file
     if uploaded_file.name.endswith(".csv"):
         df = pd.read_csv(uploaded_file)
     else:
         df = pd.read_excel(uploaded_file)
 
-    # ---------------- PAGE 1 ----------------
+    # ================================
+    # 📊 PAGE 1 — OVERVIEW
+    # ================================
     if menu == "Upload & Overview":
 
         st.success("File uploaded successfully ✅")
 
         col1, col2, col3 = st.columns(3)
 
-        col1.metric("Rows", df.shape[0])
-        col2.metric("Columns", df.shape[1])
-        col3.metric("Missing Values", df.isnull().sum().sum())
+        with col1:
+            st.markdown("### 📌 Total Rows")
+            st.metric("", df.shape[0])
+
+        with col2:
+            st.markdown("### 📊 Total Columns")
+            st.metric("", df.shape[1])
+
+        with col3:
+            st.markdown("### ⚠ Missing Values")
+            st.metric("", df.isnull().sum().sum())
 
         st.divider()
 
@@ -89,7 +105,23 @@ if uploaded_file:
         st.subheader("📊 Statistical Summary")
         st.write(df.describe())
 
-    # ---------------- PAGE 2 ----------------
+        # -------- AUTO INSIGHTS --------
+        st.subheader("🧠 Auto Insights")
+
+        numeric_df = df.select_dtypes(include=["int64", "float64"])
+
+        if not numeric_df.empty:
+            highest_mean = numeric_df.mean().idxmax()
+            lowest_mean = numeric_df.mean().idxmin()
+
+            st.info(f"📈 Highest average column: **{highest_mean}**")
+            st.info(f"📉 Lowest average column: **{lowest_mean}**")
+        else:
+            st.warning("No numeric data available for insights.")
+
+    # ================================
+    # 📈 PAGE 2 — VISUALIZATIONS
+    # ================================
     if menu == "Visualizations":
 
         numeric_columns = df.select_dtypes(include=["int64", "float64"]).columns
@@ -120,7 +152,9 @@ if uploaded_file:
         else:
             st.warning("No numeric columns available for visualization.")
 
-    # ---------------- PAGE 3 ----------------
+    # ================================
+    # 🧹 PAGE 3 — DATA CLEANING
+    # ================================
     if menu == "Data Cleaning":
 
         st.subheader("🧹 Data Cleaning Tools")
@@ -137,14 +171,16 @@ if uploaded_file:
 
         st.dataframe(df, use_container_width=True)
 
+        # -------- DOWNLOAD CLEANED FILE --------
         csv = df.to_csv(index=False).encode("utf-8")
 
         st.download_button(
-            "📥 Download Cleaned Data",
-            csv,
-            "cleaned_data.csv",
-            "text/csv"
+            label="📥 Download Cleaned Data",
+            data=csv,
+            file_name="cleaned_data.csv",
+            mime="text/csv"
         )
 
+# ---------------- FOOTER ----------------
 st.divider()
-st.caption("🚀 Corporate Data Analyzer | Built by Denis | Powered by Python & Streamlit")
+st.caption("🚀 Corporate Data Intelligence Suite | Built by Denis | Powered by Python & Streamlit")
