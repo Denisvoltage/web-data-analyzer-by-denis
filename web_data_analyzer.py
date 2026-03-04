@@ -52,3 +52,10 @@ if uploaded_file is not None:
         fig, ax = plt.subplots()
         df[column].hist(ax=ax)
         st.pyplot(fig)
+st.divider()
+st.markdown("""
+---
+🔗 Developed by **Denis**  
+💼 Corporate Data Analytics Tool  
+🚀 Powered by Python & Streamlit
+""")
