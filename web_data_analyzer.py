@@ -11,12 +11,32 @@ import datetime
 
 # ---------------- PAGE CONFIG ----------------
 st.set_page_config(
-    page_title="Enterprise Data Intelligence | Denis",
+    page_title="Data Intelligence Platform",
     page_icon="📊",
     layout="wide"
 )
 
-# ---------------- DATABASE SETUP ----------------
+# ---------------- CLEAN UI STYLING ----------------
+st.markdown("""
+<style>
+.main-title {
+    font-size: 42px;
+    font-weight: 700;
+    margin-bottom: 5px;
+}
+.sub-title {
+    color: #6b7280;
+    margin-bottom: 30px;
+}
+.card {
+    padding: 20px;
+    border-radius: 12px;
+    background-color: #111827;
+}
+</style>
+""", unsafe_allow_html=True)
+
+# ---------------- DATABASE ----------------
 conn = sqlite3.connect("data_platform.db", check_same_thread=False)
 cursor = conn.cursor()
 
@@ -41,7 +61,7 @@ conn.commit()
 def register_user(username, password):
     hashed = bcrypt.hashpw(password.encode(), bcrypt.gensalt())
     try:
-        cursor.execute("INSERT INTO users (username, password) VALUES (?, ?)", (username, hashed))
+        cursor.execute("INSERT INTO users VALUES (?, ?)", (username, hashed))
         conn.commit()
         return True
     except:
@@ -51,8 +71,7 @@ def login_user(username, password):
     cursor.execute("SELECT password FROM users WHERE username=?", (username,))
     result = cursor.fetchone()
     if result:
-        stored_password = result[0]
-        if bcrypt.checkpw(password.encode(), stored_password):
+        if bcrypt.checkpw(password.encode(), result[0]):
             return True
     return False
 
@@ -61,7 +80,7 @@ def save_report(username):
     cursor.execute("INSERT INTO reports (username, report_time) VALUES (?, ?)", (username, now))
     conn.commit()
 
-def get_user_reports(username):
+def get_reports(username):
     cursor.execute("SELECT report_time FROM reports WHERE username=?", (username,))
     return cursor.fetchall()
 
@@ -75,7 +94,8 @@ if "user" not in st.session_state:
 # ---------------- LOGIN SCREEN ----------------
 if not st.session_state.logged_in:
 
-    st.title("🚀 Enterprise Data Intelligence Platform")
+    st.markdown('<div class="main-title">🚀 Data Intelligence Platform</div>', unsafe_allow_html=True)
+    st.markdown('<div class="sub-title">Professional Analytics • Automated Reports</div>', unsafe_allow_html=True)
 
     option = st.radio("Choose Option", ["Login", "Register"])
 
@@ -85,7 +105,7 @@ if not st.session_state.logged_in:
     if option == "Register":
         if st.button("Create Account"):
             if register_user(username, password):
-                st.success("Account created successfully. Please login.")
+                st.success("Account created successfully.")
             else:
                 st.error("Username already exists.")
 
@@ -100,7 +120,7 @@ if not st.session_state.logged_in:
 
     st.stop()
 
-# ---------------- MAIN APP ----------------
+# ---------------- SIDEBAR ----------------
 st.sidebar.success(f"Logged in as: {st.session_state.user}")
 
 if st.sidebar.button("Logout"):
@@ -110,11 +130,14 @@ if st.sidebar.button("Logout"):
 
 menu = st.sidebar.radio("Navigation", ["Dashboard", "Report History"])
 
-st.title("📊 Executive Analytics Dashboard")
+# ---------------- HEADER ----------------
+st.markdown('<div class="main-title">📊 Executive Analytics Dashboard</div>', unsafe_allow_html=True)
+st.markdown('<div class="sub-title">Upload data. Get instant insights. Generate executive reports.</div>', unsafe_allow_html=True)
 
+# ---------------- DASHBOARD ----------------
 if menu == "Dashboard":
 
-    uploaded_file = st.file_uploader("Upload CSV or Excel", type=["csv", "xlsx"])
+    uploaded_file = st.file_uploader("Upload CSV or Excel File", type=["csv", "xlsx"])
 
     if uploaded_file:
 
@@ -123,27 +146,38 @@ if menu == "Dashboard":
         else:
             df = pd.read_excel(uploaded_file)
 
-        st.subheader("Dataset Preview")
-        st.dataframe(df.head(), use_container_width=True)
+        # KPI CARDS
+        col1, col2, col3 = st.columns(3)
+        col1.metric("Total Rows", df.shape[0])
+        col2.metric("Total Columns", df.shape[1])
+        col3.metric("Missing Values", df.isnull().sum().sum())
 
-        col1, col2 = st.columns(2)
-        col1.metric("Rows", df.shape[0])
-        col2.metric("Columns", df.shape[1])
+        st.divider()
+
+        st.subheader("Data Preview")
+        st.dataframe(df.head(), use_container_width=True)
 
         numeric_df = df.select_dtypes(include=["int64", "float64"])
 
         if not numeric_df.empty:
-            column = st.selectbox("Select Column for Chart", numeric_df.columns)
-            fig = px.bar(df, x=column)
+
+            # AUTO SELECT BEST COLUMN
+            best_column = numeric_df.mean().idxmax()
+
+            st.subheader("Key Performance Visualization")
+            fig = px.bar(df, x=best_column)
             st.plotly_chart(fig, use_container_width=True)
 
             commentary = f"""
 Executive Summary:
-The dataset contains {df.shape[0]} records and {df.shape[1]} columns.
-Primary focus metric selected: {column}.
-Data appears structured for management reporting.
+
+This dataset contains {df.shape[0]} records across {df.shape[1]} variables.
+The strongest performing metric appears to be '{best_column}',
+indicating it holds the highest average value.
+Data structure is suitable for strategic reporting and executive review.
 """
 
+            st.subheader("AI Executive Commentary")
             st.info(commentary)
 
             if st.button("Generate Executive PDF Report"):
@@ -172,11 +206,15 @@ Data appears structured for management reporting.
                     mime="application/pdf"
                 )
 
+        else:
+            st.warning("No numeric columns available for visualization.")
+
+# ---------------- REPORT HISTORY ----------------
 if menu == "Report History":
 
-    st.subheader("📁 Your Report History")
+    st.subheader("Your Generated Reports")
 
-    reports = get_user_reports(st.session_state.user)
+    reports = get_reports(st.session_state.user)
 
     if reports:
         for r in reports:
@@ -184,4 +222,4 @@ if menu == "Report History":
     else:
         st.info("No reports generated yet.")
 
-st.caption("Production Mode | Persistent Users | Built by Denis")
+st.caption("Enterprise Ready | Clean UI | Built by Denis")
