@@ -2,61 +2,66 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 
-# ---------------- PAGE SETTINGS ----------------
+# ---------------- PAGE CONFIG ----------------
 st.set_page_config(
-    st.markdown("""
-<style>
-.hero-title {
-    font-size: 48px;
-    font-weight: 700;
-    text-align: center;
-}
-.hero-subtitle {
-    font-size: 20px;
-    text-align: center;
-    color: #9aa0a6;
-    margin-bottom: 20px;
-}
-.hero-box {
-    padding: 30px;
-    border-radius: 15px;
-    background: linear-gradient(90deg, #111827, #1f2937);
-}
-</style>
-""", unsafe_allow_html=True)
-
-st.markdown("""
-<div class="hero-box">
-    <div class="hero-title">🚀 Corporate Data Analyzer</div>
-    <div class="hero-subtitle">
-        Smart • Fast • Professional Data Intelligence Platform<br>
-        Built & Designed by Denis
-    </div>
-</div>
-""", unsafe_allow_html=True)
-
-st.divider()
+    page_title="Corporate Data Analyzer | Denis",
     page_icon="📊",
     layout="wide"
 )
 
-# ---------------- SIDEBAR ----------------
-st.sidebar.title("📊 Corporate Data Analyzer")
-st.sidebar.markdown("Built by Denis")
-st.sidebar.divider()
-
-menu = st.sidebar.radio(
-    "Navigation",
-    ["Upload & Overview", "Visualizations", "Data Cleaning"]
+# ---------------- PREMIUM HEADER ----------------
+st.markdown(
+    """
+    <style>
+    .hero-title {
+        font-size: 48px;
+        font-weight: 700;
+        text-align: center;
+    }
+    .hero-subtitle {
+        font-size: 20px;
+        text-align: center;
+        color: #9aa0a6;
+        margin-bottom: 20px;
+    }
+    .hero-box {
+        padding: 30px;
+        border-radius: 15px;
+        background: linear-gradient(90deg, #111827, #1f2937);
+        margin-bottom: 20px;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True
 )
 
-# ---------------- HEADER ----------------
-st.title("📊 Corporate Data Analyzer")
-st.caption("Professional Data Insights Platform | 2026 Edition")
+st.markdown(
+    """
+    <div class="hero-box">
+        <div class="hero-title">🚀 Corporate Data Analyzer</div>
+        <div class="hero-subtitle">
+            Smart • Fast • Professional Data Intelligence Platform<br>
+            Built & Designed by Denis
+        </div>
+    </div>
+    """,
+    unsafe_allow_html=True
+)
 
 st.divider()
 
-uploaded_file = st.file_uploader("Upload Excel or CSV File", type=["csv", "xlsx"])
+# ---------------- SIDEBAR ----------------
+st.sidebar.title("Navigation")
+menu = st.sidebar.radio(
+    "Go to",
+    ["Upload & Overview", "Visualizations", "Data Cleaning"]
+)
+
+st.sidebar.markdown("---")
+st.sidebar.caption("© 2026 Denis Analytics")
+
+# ---------------- FILE UPLOAD ----------------
+uploaded_file = st.file_uploader("Upload Excel or CSV File (Max 200MB)", type=["csv", "xlsx"])
 
 if uploaded_file:
 
@@ -87,7 +92,7 @@ if uploaded_file:
     # ---------------- PAGE 2 ----------------
     if menu == "Visualizations":
 
-        numeric_columns = df.select_dtypes(include=["int64","float64"]).columns
+        numeric_columns = df.select_dtypes(include=["int64", "float64"]).columns
 
         if len(numeric_columns) > 0:
 
@@ -142,5 +147,4 @@ if uploaded_file:
         )
 
 st.divider()
-st.caption("© 2026 Denis | Corporate Data Analytics Platform | Powered by Python & Streamlit")
-
+st.caption("🚀 Corporate Data Analyzer | Built by Denis | Powered by Python & Streamlit")
