@@ -6,3 +6,4 @@ plotly
 numpy
 reportlab
 kaleido
+bcrypt
