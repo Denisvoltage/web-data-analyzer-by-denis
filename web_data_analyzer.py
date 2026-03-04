@@ -2,12 +2,13 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 from io import BytesIO
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table
-from reportlab.lib.styles import ParagraphStyle
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, Image
+from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib import colors
 from reportlab.lib.units import inch
-from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib.pagesizes import A4
+import tempfile
+import datetime
 
 # ---------------- PAGE CONFIG ----------------
 st.set_page_config(
@@ -16,7 +17,7 @@ st.set_page_config(
     layout="wide"
 )
 
-# ---------------- PREMIUM HEADER ----------------
+# ---------------- HEADER ----------------
 st.markdown("""
 <style>
 .hero-box {
@@ -43,7 +44,7 @@ st.markdown("""
 <div class="hero-box">
     <div class="hero-title">📊 Corporate Data Intelligence Suite</div>
     <div class="hero-subtitle">
-        Executive Analytics • Automated Insights • PDF Reporting<br>
+        Executive Analytics • AI Commentary • PDF Reporting<br>
         Built by Denis
     </div>
 </div>
@@ -57,7 +58,9 @@ menu = st.sidebar.radio(
     "Select Module",
     ["Upload & Overview", "Visualizations", "Data Cleaning"]
 )
+
 st.sidebar.markdown("---")
+logo_file = st.sidebar.file_uploader("Upload Company Logo (Optional)", type=["png","jpg"])
 st.sidebar.caption("© 2026 Denis Analytics")
 
 # ---------------- FILE UPLOAD ----------------
@@ -73,6 +76,20 @@ if uploaded_file:
     else:
         df = pd.read_excel(uploaded_file)
 
+    # ---------------- DATE FILTER ----------------
+    date_columns = df.select_dtypes(include=["datetime64"]).columns
+
+    if len(date_columns) > 0:
+        selected_date_column = st.selectbox("Select Date Column for Filtering", date_columns)
+        min_date = df[selected_date_column].min()
+        max_date = df[selected_date_column].max()
+        start_date, end_date = st.date_input(
+            "Filter Date Range",
+            [min_date, max_date]
+        )
+        df = df[(df[selected_date_column] >= pd.to_datetime(start_date)) &
+                (df[selected_date_column] <= pd.to_datetime(end_date))]
+
     # ================================
     # PAGE 1 — OVERVIEW
     # ================================
@@ -81,80 +98,73 @@ if uploaded_file:
         st.success("File uploaded successfully ✅")
 
         col1, col2, col3 = st.columns(3)
-
         col1.metric("Total Rows", df.shape[0])
         col2.metric("Total Columns", df.shape[1])
         col3.metric("Missing Values", df.isnull().sum().sum())
 
         st.divider()
-
-        st.subheader("📄 Data Preview")
-        st.dataframe(df, use_container_width=True)
-
-        st.subheader("📊 Statistical Summary")
-        st.write(df.describe())
-
-        # -------- AI COMMENTARY --------
-        st.subheader("🧠 AI Executive Commentary")
+        st.dataframe(df.head(), use_container_width=True)
 
         numeric_df = df.select_dtypes(include=["int64", "float64"])
 
+        # -------- AI COMMENTARY --------
         if not numeric_df.empty:
             highest_mean = numeric_df.mean().idxmax()
             lowest_mean = numeric_df.mean().idxmin()
 
             commentary = f"""
-            The dataset contains {df.shape[0]} rows and {df.shape[1]} columns.
-            The strongest performing metric appears to be '{highest_mean}',
-            showing the highest average value across the dataset.
-            Conversely, '{lowest_mean}' reflects the lowest average,
-            which may require deeper operational review.
-            Overall data structure appears stable for executive analysis.
-            """
-
+Executive Summary:
+The dataset consists of {df.shape[0]} records across {df.shape[1]} variables.
+The strongest performing metric is '{highest_mean}', demonstrating the highest average value.
+The lowest average metric is '{lowest_mean}', which may require management review.
+Overall data consistency appears suitable for strategic reporting.
+"""
             st.info(commentary)
         else:
             commentary = "No numeric data available for executive insights."
             st.warning(commentary)
 
+        # -------- CHART FOR PDF --------
+        chart_column = None
+        fig = None
+
+        if len(numeric_df.columns) > 0:
+            chart_column = st.selectbox("Select Column for Executive Chart", numeric_df.columns)
+            fig = px.bar(df, x=chart_column)
+            st.plotly_chart(fig, use_container_width=True)
+
         # -------- PDF GENERATION --------
-        if st.button("📄 Generate Executive PDF Report"):
+        if st.button("📄 Generate Full Executive PDF Report"):
 
             buffer = BytesIO()
             doc = SimpleDocTemplate(buffer, pagesize=A4)
             elements = []
-
             styles = getSampleStyleSheet()
-            title_style = styles["Heading1"]
-            normal_style = styles["Normal"]
 
-            elements.append(Paragraph("Corporate Data Intelligence Report", title_style))
-            elements.append(Spacer(1, 0.5 * inch))
-
-            elements.append(Paragraph(f"Total Rows: {df.shape[0]}", normal_style))
-            elements.append(Paragraph(f"Total Columns: {df.shape[1]}", normal_style))
-            elements.append(Paragraph(f"Missing Values: {df.isnull().sum().sum()}", normal_style))
+            elements.append(Paragraph("Corporate Data Intelligence Report", styles["Heading1"]))
+            elements.append(Spacer(1, 0.3 * inch))
+            elements.append(Paragraph(f"Generated On: {datetime.datetime.now()}", styles["Normal"]))
             elements.append(Spacer(1, 0.3 * inch))
 
-            elements.append(Paragraph("Executive Commentary:", styles["Heading2"]))
-            elements.append(Spacer(1, 0.2 * inch))
-            elements.append(Paragraph(commentary, normal_style))
+            elements.append(Paragraph(commentary, styles["Normal"]))
             elements.append(Spacer(1, 0.5 * inch))
 
-            # Add small data preview table (first 5 rows)
-            preview_data = [df.columns.tolist()] + df.head().values.tolist()
-            table = Table(preview_data)
-            table.setStyle([
-                ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
-                ('GRID', (0, 0), (-1, -1), 0.5, colors.black)
-            ])
-            elements.append(table)
+            if logo_file:
+                with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp_logo:
+                    tmp_logo.write(logo_file.getvalue())
+                    elements.append(Image(tmp_logo.name, width=2*inch, height=1*inch))
+                    elements.append(Spacer(1, 0.5 * inch))
+
+            if fig:
+                with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp_chart:
+                    fig.write_image(tmp_chart.name)
+                    elements.append(Image(tmp_chart.name, width=5*inch, height=3*inch))
 
             doc.build(elements)
             buffer.seek(0)
 
             st.download_button(
-                label="⬇ Download PDF Report",
+                label="⬇ Download Executive PDF",
                 data=buffer,
                 file_name="Executive_Report.pdf",
                 mime="application/pdf"
@@ -168,7 +178,6 @@ if uploaded_file:
         numeric_columns = df.select_dtypes(include=["int64", "float64"]).columns
 
         if len(numeric_columns) > 0:
-
             chart_type = st.selectbox(
                 "Select Chart Type",
                 ["Histogram", "Bar Chart", "Line Chart", "Pie Chart"]
@@ -186,16 +195,13 @@ if uploaded_file:
                 fig = px.pie(df, names=column)
 
             st.plotly_chart(fig, use_container_width=True)
-
         else:
-            st.warning("No numeric columns available for visualization.")
+            st.warning("No numeric columns available.")
 
     # ================================
     # PAGE 3 — DATA CLEANING
     # ================================
     if menu == "Data Cleaning":
-
-        st.subheader("🧹 Data Cleaning Tools")
 
         if st.button("Remove Missing Values"):
             df = df.dropna()
@@ -217,4 +223,4 @@ if uploaded_file:
         )
 
 st.divider()
-st.caption("🚀 Corporate Data Intelligence Suite | Executive Reporting Tool | Built by Denis")
+st.caption("🚀 Enterprise Executive Analytics Platform | Built by Denis")
