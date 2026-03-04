@@ -1,162 +1,187 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+import sqlite3
+import bcrypt
 from io import BytesIO
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib.pagesizes import A4
 import datetime
-import bcrypt
 
 # ---------------- PAGE CONFIG ----------------
 st.set_page_config(
-    page_title="Data Intelligence SaaS | Denis",
+    page_title="Enterprise Data Intelligence | Denis",
     page_icon="📊",
     layout="wide"
 )
 
-# ---------------- SESSION SETUP ----------------
-if "users" not in st.session_state:
-    st.session_state.users = {}
+# ---------------- DATABASE SETUP ----------------
+conn = sqlite3.connect("data_platform.db", check_same_thread=False)
+cursor = conn.cursor()
 
-if "logged_in" not in st.session_state:
-    st.session_state.logged_in = False
+cursor.execute("""
+CREATE TABLE IF NOT EXISTS users (
+    username TEXT PRIMARY KEY,
+    password BLOB
+)
+""")
 
-if "current_user" not in st.session_state:
-    st.session_state.current_user = None
+cursor.execute("""
+CREATE TABLE IF NOT EXISTS reports (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    username TEXT,
+    report_time TEXT
+)
+""")
 
-if "report_history" not in st.session_state:
-    st.session_state.report_history = {}
+conn.commit()
 
-# ---------------- AUTH SYSTEM ----------------
-def register(username, password):
+# ---------------- AUTH FUNCTIONS ----------------
+def register_user(username, password):
     hashed = bcrypt.hashpw(password.encode(), bcrypt.gensalt())
-    st.session_state.users[username] = hashed
-    st.session_state.report_history[username] = []
+    try:
+        cursor.execute("INSERT INTO users (username, password) VALUES (?, ?)", (username, hashed))
+        conn.commit()
+        return True
+    except:
+        return False
 
-def login(username, password):
-    if username in st.session_state.users:
-        if bcrypt.checkpw(password.encode(), st.session_state.users[username]):
-            st.session_state.logged_in = True
-            st.session_state.current_user = username
+def login_user(username, password):
+    cursor.execute("SELECT password FROM users WHERE username=?", (username,))
+    result = cursor.fetchone()
+    if result:
+        stored_password = result[0]
+        if bcrypt.checkpw(password.encode(), stored_password):
             return True
     return False
 
-# ---------------- LOGIN / REGISTER SCREEN ----------------
+def save_report(username):
+    now = str(datetime.datetime.now())
+    cursor.execute("INSERT INTO reports (username, report_time) VALUES (?, ?)", (username, now))
+    conn.commit()
+
+def get_user_reports(username):
+    cursor.execute("SELECT report_time FROM reports WHERE username=?", (username,))
+    return cursor.fetchall()
+
+# ---------------- SESSION ----------------
+if "logged_in" not in st.session_state:
+    st.session_state.logged_in = False
+
+if "user" not in st.session_state:
+    st.session_state.user = None
+
+# ---------------- LOGIN SCREEN ----------------
 if not st.session_state.logged_in:
 
-    st.markdown("## 🚀 Welcome to Data Intelligence SaaS")
-    option = st.radio("Select Option", ["Login", "Register"])
+    st.title("🚀 Enterprise Data Intelligence Platform")
+
+    option = st.radio("Choose Option", ["Login", "Register"])
 
     username = st.text_input("Username")
     password = st.text_input("Password", type="password")
 
     if option == "Register":
         if st.button("Create Account"):
-            if username and password:
-                register(username, password)
+            if register_user(username, password):
                 st.success("Account created successfully. Please login.")
             else:
-                st.warning("Enter username and password.")
+                st.error("Username already exists.")
 
     if option == "Login":
         if st.button("Login"):
-            if login(username, password):
-                st.success("Login successful")
+            if login_user(username, password):
+                st.session_state.logged_in = True
+                st.session_state.user = username
                 st.rerun()
             else:
-                st.error("Invalid credentials")
+                st.error("Invalid credentials.")
 
     st.stop()
 
 # ---------------- MAIN APP ----------------
-st.sidebar.success(f"Logged in as: {st.session_state.current_user}")
+st.sidebar.success(f"Logged in as: {st.session_state.user}")
 
 if st.sidebar.button("Logout"):
     st.session_state.logged_in = False
-    st.session_state.current_user = None
+    st.session_state.user = None
     st.rerun()
 
-st.title("📊 Executive Data Intelligence Platform")
+menu = st.sidebar.radio("Navigation", ["Dashboard", "Report History"])
 
-menu = st.sidebar.radio(
-    "Navigation",
-    ["Upload & Analyze", "Report History"]
-)
+st.title("📊 Executive Analytics Dashboard")
 
-uploaded_file = st.file_uploader("Upload CSV or Excel", type=["csv", "xlsx"])
+if menu == "Dashboard":
 
-if menu == "Upload & Analyze" and uploaded_file:
+    uploaded_file = st.file_uploader("Upload CSV or Excel", type=["csv", "xlsx"])
 
-    if uploaded_file.name.endswith(".csv"):
-        df = pd.read_csv(uploaded_file)
-    else:
-        df = pd.read_excel(uploaded_file)
+    if uploaded_file:
 
-    st.subheader("Dataset Overview")
-    st.write(df.head())
+        if uploaded_file.name.endswith(".csv"):
+            df = pd.read_csv(uploaded_file)
+        else:
+            df = pd.read_excel(uploaded_file)
 
-    col1, col2 = st.columns(2)
-    col1.metric("Rows", df.shape[0])
-    col2.metric("Columns", df.shape[1])
+        st.subheader("Dataset Preview")
+        st.dataframe(df.head(), use_container_width=True)
 
-    numeric_df = df.select_dtypes(include=["int64", "float64"])
+        col1, col2 = st.columns(2)
+        col1.metric("Rows", df.shape[0])
+        col2.metric("Columns", df.shape[1])
 
-    if not numeric_df.empty:
-        column = st.selectbox("Select Column for Chart", numeric_df.columns)
-        fig = px.bar(df, x=column)
-        st.plotly_chart(fig, use_container_width=True)
+        numeric_df = df.select_dtypes(include=["int64", "float64"])
 
-        commentary = f"""
+        if not numeric_df.empty:
+            column = st.selectbox("Select Column for Chart", numeric_df.columns)
+            fig = px.bar(df, x=column)
+            st.plotly_chart(fig, use_container_width=True)
+
+            commentary = f"""
 Executive Summary:
-Dataset contains {df.shape[0]} records.
-Primary performance metric: {column}.
-Data appears structured for strategic analysis.
+The dataset contains {df.shape[0]} records and {df.shape[1]} columns.
+Primary focus metric selected: {column}.
+Data appears structured for management reporting.
 """
 
-        st.info(commentary)
+            st.info(commentary)
 
-        if st.button("Generate Executive PDF Report"):
+            if st.button("Generate Executive PDF Report"):
 
-            buffer = BytesIO()
-            doc = SimpleDocTemplate(buffer, pagesize=A4)
-            elements = []
-            styles = getSampleStyleSheet()
+                buffer = BytesIO()
+                doc = SimpleDocTemplate(buffer, pagesize=A4)
+                elements = []
+                styles = getSampleStyleSheet()
 
-            elements.append(Paragraph("Executive Data Intelligence Report", styles["Heading1"]))
-            elements.append(Spacer(1, 12))
-            elements.append(Paragraph(f"Generated by: {st.session_state.current_user}", styles["Normal"]))
-            elements.append(Paragraph(f"Date: {datetime.datetime.now()}", styles["Normal"]))
-            elements.append(Spacer(1, 12))
-            elements.append(Paragraph(commentary, styles["Normal"]))
+                elements.append(Paragraph("Executive Data Intelligence Report", styles["Heading1"]))
+                elements.append(Spacer(1, 12))
+                elements.append(Paragraph(f"Generated by: {st.session_state.user}", styles["Normal"]))
+                elements.append(Paragraph(f"Date: {datetime.datetime.now()}", styles["Normal"]))
+                elements.append(Spacer(1, 12))
+                elements.append(Paragraph(commentary, styles["Normal"]))
 
-            doc.build(elements)
-            buffer.seek(0)
+                doc.build(elements)
+                buffer.seek(0)
 
-            # Save to user history
-            st.session_state.report_history[st.session_state.current_user].append(
-                f"Report generated on {datetime.datetime.now()}"
-            )
+                save_report(st.session_state.user)
 
-            st.download_button(
-                label="Download Executive PDF",
-                data=buffer,
-                file_name="Executive_Report.pdf",
-                mime="application/pdf"
-            )
+                st.download_button(
+                    label="Download Executive PDF",
+                    data=buffer,
+                    file_name="Executive_Report.pdf",
+                    mime="application/pdf"
+                )
 
 if menu == "Report History":
 
-    st.subheader("📁 Your Generated Reports")
+    st.subheader("📁 Your Report History")
 
-    history = st.session_state.report_history.get(
-        st.session_state.current_user, []
-    )
+    reports = get_user_reports(st.session_state.user)
 
-    if history:
-        for item in history:
-            st.write("•", item)
+    if reports:
+        for r in reports:
+            st.write("• Generated on:", r[0])
     else:
         st.info("No reports generated yet.")
 
-st.caption("Enterprise Data Intelligence SaaS | Built by Denis")
+st.caption("Production Mode | Persistent Users | Built by Denis")
