@@ -4,7 +4,38 @@ import plotly.express as px
 
 # ---------------- PAGE SETTINGS ----------------
 st.set_page_config(
-    page_title="Corporate Data Analyzer | Denis",
+    st.markdown("""
+<style>
+.hero-title {
+    font-size: 48px;
+    font-weight: 700;
+    text-align: center;
+}
+.hero-subtitle {
+    font-size: 20px;
+    text-align: center;
+    color: #9aa0a6;
+    margin-bottom: 20px;
+}
+.hero-box {
+    padding: 30px;
+    border-radius: 15px;
+    background: linear-gradient(90deg, #111827, #1f2937);
+}
+</style>
+""", unsafe_allow_html=True)
+
+st.markdown("""
+<div class="hero-box">
+    <div class="hero-title">🚀 Corporate Data Analyzer</div>
+    <div class="hero-subtitle">
+        Smart • Fast • Professional Data Intelligence Platform<br>
+        Built & Designed by Denis
+    </div>
+</div>
+""", unsafe_allow_html=True)
+
+st.divider()
     page_icon="📊",
     layout="wide"
 )
@@ -112,3 +143,4 @@ if uploaded_file:
 
 st.divider()
 st.caption("© 2026 Denis | Corporate Data Analytics Platform | Powered by Python & Streamlit")
+
