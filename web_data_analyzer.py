@@ -35,6 +35,8 @@ conn.commit()
 
 # ---------------- AUTH FUNCTIONS ----------------
 def register_user(username, password):
+    if not username or not password:
+        return False
     hashed = bcrypt.hashpw(password.encode(), bcrypt.gensalt())
     try:
         cursor.execute("INSERT INTO users VALUES (?, ?)", (username, hashed))
@@ -59,7 +61,7 @@ def get_reports(username):
     cursor.execute("SELECT report_time FROM reports WHERE username=?", (username,))
     return cursor.fetchall()
 
-# ---------------- SESSION ----------------
+# ---------------- SESSION STATE ----------------
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
 if "user" not in st.session_state:
@@ -69,7 +71,7 @@ if "bi_df" not in st.session_state:
 if "bi_report" not in st.session_state:
     st.session_state.bi_report = None
 
-# ---------------- LOGIN ----------------
+# ---------------- LOGIN PAGE ----------------
 if not st.session_state.logged_in:
 
     st.title("🚀 Data Intelligence Platform")
@@ -83,7 +85,7 @@ if not st.session_state.logged_in:
             if register_user(username, password):
                 st.success("Account created successfully.")
             else:
-                st.error("Username already exists.")
+                st.error("Username already exists or invalid input.")
 
     if option == "Login":
         if st.button("Login"):
@@ -160,7 +162,7 @@ Top performing metric: {best_column}.
                 st.download_button("Download PDF", buffer, "Executive_Report.pdf")
 
 # =====================================================
-# INTERACTIVE BI TOOL (FULL POWER)
+# INTERACTIVE BI TOOL
 # =====================================================
 if menu == "Interactive BI Tool":
 
@@ -175,12 +177,13 @@ if menu == "Interactive BI Tool":
         else:
             df = pd.read_csv(uploaded_file) if uploaded_file.name.endswith(".csv") else pd.read_excel(uploaded_file)
 
-            # Auto detect date columns
+            # Safer date detection
             for col in df.columns:
-                try:
-                    df[col] = pd.to_datetime(df[col])
-                except:
-                    pass
+                if df[col].dtype == "object":
+                    try:
+                        df[col] = pd.to_datetime(df[col], errors="raise")
+                    except:
+                        pass
 
             st.session_state.bi_df = df
             st.session_state.bi_report = None
@@ -195,40 +198,51 @@ if menu == "Interactive BI Tool":
         col1.metric("Rows", df.shape[0])
         col2.metric("Columns", df.shape[1])
 
-        # ---------------- FILTERS ----------------
         st.subheader("🔎 Filters")
 
         text_cols = df.select_dtypes(include=["object"]).columns.tolist()
         num_cols = df.select_dtypes(include=["int64", "float64"]).columns.tolist()
         date_cols = df.select_dtypes(include=["datetime64[ns]"]).columns.tolist()
 
-        # Text filters
+        # TEXT FILTERS
         for col in text_cols:
             selected = st.multiselect(f"{col}", df[col].dropna().unique())
             if selected:
                 df = df[df[col].isin(selected)]
 
-        # Numeric filters
+        # NUMERIC FILTERS
         for col in num_cols:
-            min_val, max_val = float(df[col].min()), float(df[col].max())
+            min_val = float(df[col].min())
+            max_val = float(df[col].max())
             selected_range = st.slider(f"{col} Range", min_val, max_val, (min_val, max_val))
             df = df[(df[col] >= selected_range[0]) & (df[col] <= selected_range[1])]
 
-        # Date filters
+        # DATE FILTERS (FIXED)
         for col in date_cols:
-            min_date, max_date = df[col].min(), df[col].max()
-            selected_dates = st.date_input(f"{col} Range", (min_date, max_date))
-            if isinstance(selected_dates, tuple):
-                df = df[(df[col] >= pd.to_datetime(selected_dates[0])) &
-                        (df[col] <= pd.to_datetime(selected_dates[1]))]
+
+            valid_dates = df[col].dropna()
+
+            if not valid_dates.empty:
+
+                min_date = valid_dates.min().date()
+                max_date = valid_dates.max().date()
+
+                selected_dates = st.date_input(
+                    f"{col} Range",
+                    value=(min_date, max_date)
+                )
+
+                if isinstance(selected_dates, tuple) and len(selected_dates) == 2:
+                    start_date, end_date = selected_dates
+
+                    df = df[
+                        (df[col] >= pd.to_datetime(start_date)) &
+                        (df[col] <= pd.to_datetime(end_date))
+                    ]
 
         st.divider()
 
-        # ---------------- REPORT BUILDER ----------------
         st.subheader("📑 Report Builder")
-
-        text_cols = df.select_dtypes(include=["object"]).columns.tolist()
-        num_cols = df.select_dtypes(include=["int64", "float64"]).columns.tolist()
 
         if text_cols and num_cols:
 
@@ -244,7 +258,6 @@ if menu == "Interactive BI Tool":
                 st.session_state.bi_report = report
                 st.success("Report generated.")
 
-    # ---------------- OUTPUT ----------------
     if st.session_state.bi_report is not None:
 
         report = st.session_state.bi_report
@@ -252,16 +265,17 @@ if menu == "Interactive BI Tool":
 
         export_format = st.selectbox("Export Format", ["Excel", "CSV"])
 
+        buffer = BytesIO()
+
         if export_format == "Excel":
-            buffer = BytesIO()
             report.to_excel(buffer, index=False)
-            buffer.seek(0)
-            st.download_button("Download Excel", buffer, "BI_Report.xlsx")
+            file_name = "BI_Report.xlsx"
         else:
-            buffer = BytesIO()
             report.to_csv(buffer, index=False)
-            buffer.seek(0)
-            st.download_button("Download CSV", buffer, "BI_Report.csv")
+            file_name = "BI_Report.csv"
+
+        buffer.seek(0)
+        st.download_button("Download Report", buffer, file_name)
 
         chart_type = st.selectbox("Chart Type", ["Bar", "Line", "Pie"])
 
@@ -289,6 +303,6 @@ if menu == "Report History":
         for r in reports:
             st.write("Generated on:", r[0])
     else:
-        st.info("No reports yet.")
+        st.info("No reports generated yet.")
 
 st.caption("Enterprise Ready | Built by Denis")
