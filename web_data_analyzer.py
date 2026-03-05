@@ -74,6 +74,7 @@ if "bi_report" not in st.session_state:
 if not st.session_state.logged_in:
 
     st.title("🚀 Data Intelligence Platform")
+
     option = st.radio("Choose Option", ["Login", "Register"])
 
     username = st.text_input("Username")
@@ -268,10 +269,7 @@ if menu == "Interactive BI Tool":
                 fig = px.pie(report, names=report.columns[0], values=report.columns[1])
 
             st.plotly_chart(fig, use_container_width=True)
-
-            img_bytes = fig.to_image(format="png")
-
-            st.download_button("Download Chart as PNG", img_bytes, "BI_Chart.png")
+            st.info("PNG export disabled in cloud version for stability.")
 
 # =====================================================
 # ---------------- REPORT HISTORY ----------------
