@@ -10,31 +10,7 @@ from reportlab.lib.pagesizes import A4
 import datetime
 
 # ---------------- PAGE CONFIG ----------------
-st.set_page_config(
-    page_title="Data Intelligence Platform",
-    page_icon="📊",
-    layout="wide"
-)
-
-# ---------------- CLEAN UI STYLING ----------------
-st.markdown("""
-<style>
-.main-title {
-    font-size: 42px;
-    font-weight: 700;
-    margin-bottom: 5px;
-}
-.sub-title {
-    color: #6b7280;
-    margin-bottom: 30px;
-}
-.card {
-    padding: 20px;
-    border-radius: 12px;
-    background-color: #111827;
-}
-</style>
-""", unsafe_allow_html=True)
+st.set_page_config(page_title="Data Intelligence Platform", layout="wide")
 
 # ---------------- DATABASE ----------------
 conn = sqlite3.connect("data_platform.db", check_same_thread=False)
@@ -87,16 +63,17 @@ def get_reports(username):
 # ---------------- SESSION ----------------
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
-
 if "user" not in st.session_state:
     st.session_state.user = None
+if "bi_df" not in st.session_state:
+    st.session_state.bi_df = None
+if "bi_report" not in st.session_state:
+    st.session_state.bi_report = None
 
 # ---------------- LOGIN SCREEN ----------------
 if not st.session_state.logged_in:
 
-    st.markdown('<div class="main-title">🚀 Data Intelligence Platform</div>', unsafe_allow_html=True)
-    st.markdown('<div class="sub-title">Professional Analytics • Automated Reports</div>', unsafe_allow_html=True)
-
+    st.title("🚀 Data Intelligence Platform")
     option = st.radio("Choose Option", ["Login", "Register"])
 
     username = st.text_input("Username")
@@ -128,14 +105,17 @@ if st.sidebar.button("Logout"):
     st.session_state.user = None
     st.rerun()
 
-menu = st.sidebar.radio("Navigation", ["Dashboard", "Report History"])
+menu = st.sidebar.radio(
+    "Navigation",
+    ["Executive Dashboard", "Interactive BI Tool", "Report History"]
+)
 
-# ---------------- HEADER ----------------
-st.markdown('<div class="main-title">📊 Executive Analytics Dashboard</div>', unsafe_allow_html=True)
-st.markdown('<div class="sub-title">Upload data. Get instant insights. Generate executive reports.</div>', unsafe_allow_html=True)
+# =====================================================
+# ---------------- EXECUTIVE DASHBOARD ----------------
+# =====================================================
+if menu == "Executive Dashboard":
 
-# ---------------- DASHBOARD ----------------
-if menu == "Dashboard":
+    st.title("📊 Executive Analytics Dashboard")
 
     uploaded_file = st.file_uploader("Upload CSV or Excel File", type=["csv", "xlsx"])
 
@@ -146,13 +126,10 @@ if menu == "Dashboard":
         else:
             df = pd.read_excel(uploaded_file)
 
-        # KPI CARDS
         col1, col2, col3 = st.columns(3)
         col1.metric("Total Rows", df.shape[0])
         col2.metric("Total Columns", df.shape[1])
         col3.metric("Missing Values", df.isnull().sum().sum())
-
-        st.divider()
 
         st.subheader("Data Preview")
         st.dataframe(df.head(), use_container_width=True)
@@ -161,7 +138,6 @@ if menu == "Dashboard":
 
         if not numeric_df.empty:
 
-            # AUTO SELECT BEST COLUMN
             best_column = numeric_df.mean().idxmax()
 
             st.subheader("Key Performance Visualization")
@@ -169,15 +145,11 @@ if menu == "Dashboard":
             st.plotly_chart(fig, use_container_width=True)
 
             commentary = f"""
-Executive Summary:
-
-This dataset contains {df.shape[0]} records across {df.shape[1]} variables.
-The strongest performing metric appears to be '{best_column}',
-indicating it holds the highest average value.
-Data structure is suitable for strategic reporting and executive review.
+This dataset contains {df.shape[0]} records and {df.shape[1]} columns.
+The strongest metric appears to be '{best_column}' based on highest average.
 """
 
-            st.subheader("AI Executive Commentary")
+            st.subheader("Executive Commentary")
             st.info(commentary)
 
             if st.button("Generate Executive PDF Report"):
@@ -200,26 +172,120 @@ Data structure is suitable for strategic reporting and executive review.
                 save_report(st.session_state.user)
 
                 st.download_button(
-                    label="Download Executive PDF",
-                    data=buffer,
-                    file_name="Executive_Report.pdf",
+                    "Download Executive PDF",
+                    buffer,
+                    "Executive_Report.pdf",
                     mime="application/pdf"
                 )
 
-        else:
-            st.warning("No numeric columns available for visualization.")
+# =====================================================
+# ---------------- INTERACTIVE BI TOOL ----------------
+# =====================================================
+if menu == "Interactive BI Tool":
 
+    st.title("📊 Interactive BI Tool")
+
+    uploaded_file = st.file_uploader("Select CSV or Excel File", type=["csv", "xlsx"])
+
+    if st.button("Read File"):
+
+        if uploaded_file is None:
+            st.error("Please select a file first.")
+        else:
+            try:
+                if uploaded_file.name.endswith(".csv"):
+                    df = pd.read_csv(uploaded_file)
+                else:
+                    df = pd.read_excel(uploaded_file)
+
+                st.session_state.bi_df = df
+                st.session_state.bi_report = None
+                st.success("File read successfully.")
+
+            except Exception as e:
+                st.error(f"Error reading file: {e}")
+
+    if st.session_state.bi_df is not None:
+
+        df = st.session_state.bi_df
+
+        col1, col2 = st.columns(2)
+        col1.metric("Total Rows", df.shape[0])
+        col2.metric("Total Columns", df.shape[1])
+
+        st.write("### Column Headings")
+        st.write(list(df.columns))
+
+        text_columns = df.select_dtypes(include=["object"]).columns.tolist()
+        numeric_columns = df.select_dtypes(include=["int64", "float64"]).columns.tolist()
+
+        if text_columns and numeric_columns:
+
+            group_col = st.selectbox("Group By Column", text_columns)
+            agg_method = st.selectbox(
+                "Aggregation Method",
+                ["sum", "mean", "max", "min", "count", "median"]
+            )
+            value_col = st.selectbox("Value Column", numeric_columns)
+
+            if st.button("Preview Report"):
+
+                report = df.groupby(group_col)[value_col].agg(agg_method).reset_index()
+                report = report.sort_values(by=value_col, ascending=False)
+
+                st.session_state.bi_report = report
+                st.success("Report generated successfully.")
+
+    if st.session_state.bi_report is not None:
+
+        report = st.session_state.bi_report
+
+        st.subheader("Report Output")
+        st.dataframe(report, use_container_width=True)
+
+        export_format = st.selectbox("Select Export Format", ["Excel (.xlsx)", "CSV (.csv)"])
+
+        if export_format == "Excel (.xlsx)":
+            buffer = BytesIO()
+            report.to_excel(buffer, index=False)
+            buffer.seek(0)
+            st.download_button("Download Excel", buffer, "BI_Report.xlsx")
+        else:
+            buffer = BytesIO()
+            report.to_csv(buffer, index=False)
+            buffer.seek(0)
+            st.download_button("Download CSV", buffer, "BI_Report.csv")
+
+        chart_type = st.selectbox("Select Chart Type", ["Bar Chart", "Line Chart", "Pie Chart"])
+
+        if st.button("Preview Chart"):
+
+            if chart_type == "Bar Chart":
+                fig = px.bar(report, x=report.columns[0], y=report.columns[1])
+            elif chart_type == "Line Chart":
+                fig = px.line(report, x=report.columns[0], y=report.columns[1])
+            else:
+                fig = px.pie(report, names=report.columns[0], values=report.columns[1])
+
+            st.plotly_chart(fig, use_container_width=True)
+
+            img_bytes = fig.to_image(format="png")
+
+            st.download_button("Download Chart as PNG", img_bytes, "BI_Chart.png")
+
+# =====================================================
 # ---------------- REPORT HISTORY ----------------
+# =====================================================
 if menu == "Report History":
 
-    st.subheader("Your Generated Reports")
+    st.title("📂 Report History")
 
     reports = get_reports(st.session_state.user)
 
     if reports:
         for r in reports:
-            st.write("• Generated on:", r[0])
+            st.write("Generated on:", r[0])
     else:
         st.info("No reports generated yet.")
 
-st.caption("Enterprise Ready | Clean UI | Built by Denis")
+st.caption("Enterprise Ready | Built by Denis")
